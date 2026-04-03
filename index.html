@@ -548,6 +548,11 @@
     font-size: 11px;
     color: var(--text-muted);
   }
+  #gh-sync-badge {
+    font-size: 13px;
+    margin-left: 4px;
+    transition: color 0.3s;
+  }
   #mobile-search-input {
     width: 100%;
     background: rgba(255,255,255,0.07);
@@ -585,6 +590,8 @@
   .mob-action-btn:active { background: rgba(255,255,255,0.1); color: var(--text-secondary); }
   .mob-action-danger { color: rgba(248,113,113,0.6); border-color: rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); }
   .mob-action-danger:active { background: rgba(248,113,113,0.12); color: #f87171; }
+  .mob-action-sync { color: rgba(56,189,248,0.7); border-color: rgba(56,189,248,0.2); background: rgba(56,189,248,0.05); }
+  .mob-action-sync:active { background: rgba(56,189,248,0.12); color: #38bdf8; }
 
   /* ── FAB / NEW NOTE BUTTON ──────────────────────────────── */
   #fab-new-note {
@@ -767,6 +774,7 @@
       <div id="header-actions" style="margin-top:6px;display:flex;gap:6px;">
         <button id="export-btn" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);color:#475569;border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit;">Export JSON</button>
         <button id="reset-btn" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);color:#475569;border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit;">Reset</button>
+        <button id="gh-sync-btn" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);color:#475569;border-radius:6px;padding:3px 9px;font-size:10px;cursor:pointer;font-family:inherit;">☁ Sync</button>
       </div>
     </div>
 
@@ -779,10 +787,12 @@
       <div id="mobile-title-bar">
         <span id="mobile-app-title">Theological Notes</span>
         <span id="mobile-note-count-badge"></span>
+        <span id="gh-sync-badge" title=""></span>
       </div>
       <div id="mobile-actions-bar">
         <button class="mob-action-btn" id="mobile-save-btn">💾 Save</button>
         <button class="mob-action-btn" id="mobile-export-btn">⬆ Export</button>
+        <button class="mob-action-btn mob-action-sync" id="mobile-gh-btn">☁ Sync</button>
         <button class="mob-action-btn mob-action-danger" id="mobile-reset-btn">↺ Reset</button>
       </div>
       <input type="search" id="mobile-search-input" placeholder="Search notes…" autocomplete="off" />
@@ -897,6 +907,28 @@
         <button class="modal-btn-primary" id="ac-save">Add Connection</button>
         <button class="modal-btn-secondary" id="ac-cancel">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ── GITHUB SYNC MODAL ────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-gh-setup">
+    <div class="modal-box">
+      <div class="modal-title">☁ GitHub Sync</div>
+      <p id="gh-setup-desc" style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:4px;">
+        Enter a GitHub Personal Access Token to sync your notes across all devices.
+        Create one at <strong style="color:var(--text-primary)">github.com → Settings → Developer settings → Personal access tokens (classic)</strong> — check the <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:4px;">repo</code> scope.
+      </p>
+      <div class="modal-field">
+        <label class="modal-label" for="gh-token-input">Personal Access Token</label>
+        <input class="modal-input" id="gh-token-input" type="password" placeholder="ghp_…" autocomplete="off" />
+      </div>
+      <div class="modal-error" id="gh-token-error"></div>
+      <div id="gh-token-status" style="font-size:11px;color:var(--text-muted);min-height:16px;margin-bottom:4px;"></div>
+      <div class="modal-row">
+        <button class="modal-btn-primary" id="gh-token-save">Connect &amp; Sync</button>
+        <button class="modal-btn-secondary" id="gh-token-skip">Skip</button>
+      </div>
+      <button id="gh-token-remove" style="display:none;width:100%;margin-top:8px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);color:rgba(248,113,113,0.6);border-radius:8px;padding:9px;cursor:pointer;font-size:12px;font-family:inherit;">Disconnect GitHub Sync</button>
     </div>
   </div>
 
@@ -1802,29 +1834,120 @@ let notes = [], links = [];
 
 
 // ─────────────────────────────────────────────────────────────
+// GITHUB SYNC
+// ─────────────────────────────────────────────────────────────
+const GH_REPO      = 'ethaniwalter7/theo-notes';
+const GH_TOKEN_KEY = 'theo-notes-gh-token';
+const GH_SHA_KEY   = 'theo-notes-gh-sha';
+
+function ghToken()     { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
+function setGhToken(t) { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); }
+
+// UTF-8 safe base64
+function b64Enc(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function b64Dec(b64) {
+  const bin = atob(b64.replace(/\s/g,''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function setSyncStatus(state) {
+  const badge = document.getElementById('gh-sync-badge');
+  const ghBtn = document.getElementById('gh-sync-btn');
+  const mGhBtn = document.getElementById('mobile-gh-btn');
+  const map = {
+    synced:  { icon: '☁', color: '#34d399', tip: 'Synced to GitHub' },
+    syncing: { icon: '↻', color: '#fbbf24', tip: 'Syncing…' },
+    error:   { icon: '☁✗', color: '#f87171', tip: 'GitHub sync failed' },
+    local:   { icon: '', color: '', tip: '' },
+  };
+  const s = map[state] || map.local;
+  if (badge) { badge.textContent = s.icon; badge.style.color = s.color; badge.title = s.tip; }
+  if (ghBtn)  ghBtn.style.color  = state === 'synced' ? '#34d399' : state === 'error' ? '#f87171' : '';
+  if (mGhBtn) mGhBtn.style.color = state === 'synced' ? '#34d399' : state === 'error' ? '#f87171' : '';
+}
+
+async function ghFetch() {
+  const token = ghToken(); if (!token) return null;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    localStorage.setItem(GH_SHA_KEY, j.sha);
+    return JSON.parse(b64Dec(j.content));
+  } catch(e) { console.warn('GH fetch failed', e); return null; }
+}
+
+async function ghSave(payload) {
+  const token = ghToken(); if (!token) return false;
+  try {
+    const body = { message: `Update notes ${new Date().toISOString().slice(0,10)}`, content: b64Enc(JSON.stringify(payload, null, 2)) };
+    const sha = localStorage.getItem(GH_SHA_KEY);
+    if (sha) body.sha = sha;
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
+      method: 'PUT',
+      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github.v3+json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) { console.warn('GH save failed', await r.json()); return false; }
+    const j = await r.json();
+    localStorage.setItem(GH_SHA_KEY, j.content.sha);
+    return true;
+  } catch(e) { console.warn('GH save error', e); return false; }
+}
+
+// ─────────────────────────────────────────────────────────────
 // PERSISTENCE  –  localStorage save / load
 // ─────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'theology-graph-v2';
 
+function buildPayload() {
+  const customCats = {};
+  Object.entries(CATS).forEach(([k, v]) => { if (!DEFAULT_CAT_KEYS.has(k)) customCats[k] = v; });
+  return {
+    notes: notes.map(n => ({ ...n })),
+    links: links.map(l => ({
+      source:   typeof l.source === 'object' ? l.source.id : l.source,
+      target:   typeof l.target === 'object' ? l.target.id : l.target,
+      concepts: l.concepts
+    })),
+    customCats
+  };
+}
+
+function applyPayload(p) {
+  if (!p || !Array.isArray(p.notes) || !Array.isArray(p.links)) return false;
+  if (p.customCats) {
+    Object.entries(p.customCats).forEach(([k, v]) => { if (!CATS[k]) addCategory(k, v.label, v.color); });
+  }
+  notes.length = 0; links.length = 0;
+  p.notes.forEach(n => notes.push(n));
+  p.links.forEach(l => links.push(l));
+  return true;
+}
+
 function persistData() {
   try {
-    // Capture custom (non-default) categories
-    const customCats = {};
-    Object.entries(CATS).forEach(([k, v]) => {
-      if (!DEFAULT_CAT_KEYS.has(k)) customCats[k] = v;
-    });
-    const payload = {
-      notes: notes.map(n => ({ ...n })),
-      links: links.map(l => ({
-        source:   typeof l.source === 'object' ? l.source.id : l.source,
-        target:   typeof l.target === 'object' ? l.target.id : l.target,
-        concepts: l.concepts
-      })),
-      customCats
-    };
+    const payload = buildPayload();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    showToast('Saved');
-  } catch(e) { console.warn('localStorage save failed:', e); }
+    if (ghToken()) {
+      setSyncStatus('syncing');
+      ghSave(payload).then(ok => {
+        setSyncStatus(ok ? 'synced' : 'error');
+        showToast(ok ? '☁ Saved to GitHub' : '💾 Saved locally (sync failed)');
+      });
+    } else {
+      showToast('💾 Saved locally');
+      setSyncStatus('local');
+    }
+  } catch(e) { console.warn('Save failed:', e); }
 }
 
 function loadStoredData() {
@@ -2415,19 +2538,7 @@ function confirmDeleteNote(d) {
 // EXPORT / RESET / SAVE
 // ─────────────────────────────────────────────────────────────
 function doExport() {
-  const customCats = {};
-  Object.entries(CATS).forEach(([k, v]) => {
-    if (!DEFAULT_CAT_KEYS.has(k)) customCats[k] = v;
-  });
-  const payload = {
-    notes: notes.map(n => ({ ...n })),
-    links: links.map(l => ({
-      source:   typeof l.source === 'object' ? l.source.id : l.source,
-      target:   typeof l.target === 'object' ? l.target.id : l.target,
-      concepts: l.concepts
-    })),
-    customCats
-  };
+  const payload = buildPayload();
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -2454,9 +2565,85 @@ document.getElementById('reset-btn').addEventListener('click', doReset);
 const mSave   = document.getElementById('mobile-save-btn');
 const mExport = document.getElementById('mobile-export-btn');
 const mReset  = document.getElementById('mobile-reset-btn');
+const mGh     = document.getElementById('mobile-gh-btn');
 if (mSave)   mSave.addEventListener('click',   doSave);
 if (mExport) mExport.addEventListener('click', doExport);
 if (mReset)  mReset.addEventListener('click',  doReset);
+if (mGh)     mGh.addEventListener('click',     openGhModal);
+
+// Wire desktop GitHub Sync button
+const dGh = document.getElementById('gh-sync-btn');
+if (dGh) dGh.addEventListener('click', openGhModal);
+
+// ─────────────────────────────────────────────────────────────
+// GITHUB TOKEN MODAL
+// ─────────────────────────────────────────────────────────────
+function openGhModal() {
+  const hasToken = !!ghToken();
+  document.getElementById('gh-token-input').value = hasToken ? '••••••••••••••••••••' : '';
+  document.getElementById('gh-token-error').textContent = '';
+  document.getElementById('gh-token-status').textContent = hasToken ? '✓ GitHub sync is connected.' : '';
+  document.getElementById('gh-token-remove').style.display = hasToken ? 'block' : 'none';
+  document.getElementById('gh-setup-desc').style.display = hasToken ? 'none' : 'block';
+  openModal('modal-gh-setup');
+  if (!hasToken) setTimeout(() => document.getElementById('gh-token-input').focus(), 80);
+}
+
+document.getElementById('gh-token-skip').onclick = () => closeModal('modal-gh-setup');
+
+document.getElementById('gh-token-save').onclick = async () => {
+  const raw = document.getElementById('gh-token-input').value.trim();
+  const errEl = document.getElementById('gh-token-error');
+  const statusEl = document.getElementById('gh-token-status');
+  if (!raw || raw.startsWith('•')) { closeModal('modal-gh-setup'); return; }
+  if (!raw.startsWith('ghp_') && !raw.startsWith('github_pat_')) {
+    errEl.textContent = 'Token should start with ghp_ or github_pat_'; return;
+  }
+  statusEl.textContent = 'Verifying token…'; errEl.textContent = '';
+  try {
+    const r = await fetch('https://api.github.com/user', { headers: { Authorization: `token ${raw}` } });
+    if (!r.ok) { errEl.textContent = 'Invalid token — please check and try again.'; statusEl.textContent = ''; return; }
+    setGhToken(raw);
+    statusEl.textContent = 'Connected! Saving current notes to GitHub…';
+    setSyncStatus('syncing');
+    const ok = await ghSave(buildPayload());
+    closeModal('modal-gh-setup');
+    setSyncStatus(ok ? 'synced' : 'error');
+    showToast(ok ? '☁ GitHub sync enabled!' : 'Token saved but initial sync failed');
+  } catch(e) { errEl.textContent = 'Connection error — check your internet.'; statusEl.textContent = ''; }
+};
+
+document.getElementById('gh-token-remove').onclick = () => {
+  if (!confirm('Disconnect GitHub sync? Notes will only save locally from now on.')) return;
+  setGhToken('');
+  localStorage.removeItem(GH_SHA_KEY);
+  closeModal('modal-gh-setup');
+  setSyncStatus('local');
+  showToast('GitHub sync disconnected');
+};
+
+// ─────────────────────────────────────────────────────────────
+// ASYNC STARTUP – load from GitHub if token is set
+// ─────────────────────────────────────────────────────────────
+(async () => {
+  if (!ghToken()) {
+    // No token – show setup prompt after a short delay (only on first ever load)
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      setTimeout(() => openGhModal(), 1200);
+    }
+    return;
+  }
+  setSyncStatus('syncing');
+  const data = await ghFetch();
+  if (data && applyPayload(data)) {
+    // Also update localStorage backup
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    rebuildGraph();
+    setSyncStatus('synced');
+  } else {
+    setSyncStatus(ghToken() ? 'error' : 'local');
+  }
+})();
 
 </script>
 </body>
