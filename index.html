@@ -513,7 +513,7 @@
       display: flex !important;
     }
 
-    #zoom-controls { right: 12px; bottom: calc(72px + var(--safe-bottom)); }
+    #zoom-controls { right: auto; left: 12px; bottom: calc(24px + var(--safe-bottom)); }
 
     /* Push graph down so nodes aren't hidden behind the mobile header (title + actions + search) */
     #graph-container { padding-top: 118px; }
@@ -712,7 +712,7 @@
   #delete-note-btn:hover { background: rgba(248,113,113,0.12); color: #f87171; }
 
   @media (max-width: 700px) {
-    #fab-new-note { left: 16px; right: auto; bottom: calc(24px + var(--safe-bottom)); }
+    #fab-new-note { left: auto; right: 16px; bottom: calc(24px + var(--safe-bottom)); }
   }
 
   /* ── NEW CATEGORY BUTTON IN PICKER ─────────────────────── */
@@ -809,9 +809,7 @@
     </div>
 
     <div id="zoom-controls">
-      <button class="zoom-btn" id="zoom-in" aria-label="Zoom in">+</button>
       <button class="zoom-btn" id="zoom-reset" aria-label="Reset zoom">⊙</button>
-      <button class="zoom-btn" id="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
     <div id="tooltip"></div>
@@ -2269,8 +2267,6 @@ document.querySelectorAll(".legend-item").forEach(item => {
 // ─────────────────────────────────────────────────────────────
 // ZOOM CONTROLS
 // ─────────────────────────────────────────────────────────────
-document.getElementById("zoom-in").onclick    = () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 1.5);
-document.getElementById("zoom-out").onclick   = () => svg.transition().duration(300).call(zoomBehavior.scaleBy, 0.67);
 document.getElementById("zoom-reset").onclick = () => svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(W/2, H/2).scale(0.9).translate(-W/2, -H/2));
 
 // note-count is updated in rebuildGraph()
