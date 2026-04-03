@@ -513,7 +513,8 @@
       display: flex !important;
     }
 
-    #zoom-controls { right: auto; left: 12px; bottom: calc(24px + var(--safe-bottom)); }
+    /* Stack recenter above FAB on the right — FAB is 44px + 16px gap = 60px above bottom */
+    #zoom-controls { right: 16px; left: auto; bottom: calc(84px + var(--safe-bottom)); }
 
     /* Push graph down so nodes aren't hidden behind the mobile header (title + actions + search) */
     #graph-container { padding-top: 118px; }
