@@ -1,4 +1,4 @@
-const CACHE = 'theology-notes-v1';
+const CACHE = 'theology-notes-v6';
 
 const PRECACHE = [
   './',
