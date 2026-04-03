@@ -426,7 +426,7 @@
   @media (max-width: 700px) {
     #header, #search-wrap { display: none; }
 
-    /* Bottom sheet on mobile — 78% of viewport, not full screen */
+    /* Bottom sheet on mobile — 88% of viewport for more content space */
     #side-panel {
       top: auto;
       left: 0;
@@ -437,17 +437,18 @@
       border-radius: 18px 18px 0 0;
       transform: translateY(100%);
       box-shadow: 0 -8px 40px rgba(0,0,0,0.55);
-      height: 78dvh;
-      max-height: 78dvh;
+      height: 88dvh;
+      max-height: 88dvh;
     }
     #side-panel.open { transform: translateY(0); }
-    #panel-view { height: 100%; max-height: 78dvh; }
+    #panel-view { height: 100%; max-height: 88dvh; display: flex; flex-direction: column; }
     #panel-content {
       -webkit-overflow-scrolling: touch;
       overflow-y: auto;
       flex: 1;
       min-height: 0;
     }
+    #panel-editor { height: 100%; max-height: 88dvh; }
     #panel-connections {
       max-height: 90px;
       overflow-y: auto;
@@ -476,32 +477,35 @@
     #edit-textarea { font-size: 14px; }
     .node text { font-size: 10px; }
 
-    /* Legend: compact dot-only strip on mobile */
+    /* Legend: compact 2-column grid with labels on mobile */
     #legend {
       bottom: calc(10px + var(--safe-bottom));
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: center;
-      gap: 2px;
-      padding: 6px 8px;
-      border-radius: 20px;
-      max-width: calc(100vw - 120px); /* leave room for zoom controls */
-      width: max-content;
+      left: 12px;
+      transform: none;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px 6px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      max-width: 180px;
+      width: auto;
     }
     #legend-title { display: none; }
     .legend-item {
       margin-bottom: 0;
-      padding: 3px 5px;
-      font-size: 0;        /* hide text */
-      gap: 0;
-      line-height: 0;
+      padding: 2px 4px;
+      font-size: 10px;
+      gap: 5px;
+      line-height: 1.2;
+      color: #94a3b8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .legend-dot {
-      width: 10px;
-      height: 10px;
+      width: 7px;
+      height: 7px;
+      flex-shrink: 0;
     }
 
     /* Mobile search at top */
@@ -677,8 +681,39 @@
   #delete-note-btn:hover { background: rgba(248,113,113,0.12); color: #f87171; }
 
   @media (max-width: 700px) {
-    #fab-new-note { right: 16px; bottom: calc(80px + var(--safe-bottom)); }
+    #fab-new-note { left: 16px; right: auto; bottom: calc(24px + var(--safe-bottom)); }
   }
+
+  /* ── NEW CATEGORY BUTTON IN PICKER ─────────────────────── */
+  #nn-add-cat-btn {
+    padding: 6px 12px; border-radius: 20px; font-size: 12px;
+    font-family: inherit; cursor: pointer;
+    background: rgba(255,255,255,0.04);
+    border: 1px dashed rgba(255,255,255,0.2);
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #nn-add-cat-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+
+  /* ── COLOR SWATCH PICKER ─────────────────────────────────── */
+  #nc-color-swatches {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+  }
+  .color-swatch {
+    width: 28px; height: 28px; border-radius: 50%;
+    cursor: pointer; border: 2px solid transparent;
+    transition: transform 0.12s, border-color 0.12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.selected { border-color: white; transform: scale(1.15); }
+  #nc-custom-color-wrap {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  }
+  #nc-custom-color { width: 36px; height: 28px; border-radius: 8px; border: none;
+    background: none; cursor: pointer; padding: 0; }
+  #nc-custom-color-label { font-size: 11px; color: var(--text-muted); }
 
   /* ── CATEGORY PILLS ─────────────────────────────────────── */
   .cat-pill {
@@ -797,6 +832,7 @@
           <button class="cat-pill" data-cat="personal" style="--cc:#f87171">Reflections</button>
           <button class="cat-pill" data-cat="matthew" style="--cc:#fb923c">Matthew</button>
         </div>
+        <button type="button" id="nn-add-cat-btn">＋ New Category</button>
         <input type="hidden" id="nn-category" value="barth" />
       </div>
       <div class="modal-field">
@@ -835,6 +871,42 @@
     </div>
   </div>
 
+  <!-- ── NEW CATEGORY MODAL ───────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-new-cat">
+    <div class="modal-box">
+      <div class="modal-title">New Category</div>
+      <div class="modal-field">
+        <label class="modal-label" for="nc-name">Category Name</label>
+        <input class="modal-input" id="nc-name" type="text" placeholder="e.g. Eschatology, Prayer…" autocomplete="off" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Color</label>
+        <div id="nc-color-swatches">
+          <div class="color-swatch selected" data-color="#e879f9" style="background:#e879f9"></div>
+          <div class="color-swatch" data-color="#38bdf8" style="background:#38bdf8"></div>
+          <div class="color-swatch" data-color="#4ade80" style="background:#4ade80"></div>
+          <div class="color-swatch" data-color="#fb7185" style="background:#fb7185"></div>
+          <div class="color-swatch" data-color="#facc15" style="background:#facc15"></div>
+          <div class="color-swatch" data-color="#f97316" style="background:#f97316"></div>
+          <div class="color-swatch" data-color="#a3e635" style="background:#a3e635"></div>
+          <div class="color-swatch" data-color="#2dd4bf" style="background:#2dd4bf"></div>
+          <div class="color-swatch" data-color="#c084fc" style="background:#c084fc"></div>
+          <div class="color-swatch" data-color="#64748b" style="background:#64748b"></div>
+        </div>
+        <div id="nc-custom-color-wrap">
+          <input type="color" id="nc-custom-color" value="#e879f9" />
+          <span id="nc-custom-color-label">Or pick any color</span>
+        </div>
+        <input type="hidden" id="nc-selected-color" value="#e879f9" />
+      </div>
+      <div class="modal-error" id="nc-error"></div>
+      <div class="modal-row">
+        <button class="modal-btn-primary" id="nc-save">Create Category</button>
+        <button class="modal-btn-secondary" id="nc-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── EDIT CONNECTION MODAL ──────────────────────────────────── -->
   <div class="modal-overlay" id="modal-edit-conn">
     <div class="modal-box">
@@ -865,8 +937,9 @@ if ('serviceWorker' in navigator) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CATEGORIES
+// CATEGORIES  –  mutable so users can add custom ones
 // ─────────────────────────────────────────────────────────────
+const DEFAULT_CAT_KEYS = new Set(["barth","dostoevsky","church","philosophy","personal","matthew"]);
 const CATS = {
   barth:       { label: "Barth / Systematic", color: "#60a5fa" },
   dostoevsky:  { label: "Dostoevsky",         color: "#a78bfa" },
@@ -875,6 +948,52 @@ const CATS = {
   personal:    { label: "Reflections",        color: "#f87171" },
   matthew:     { label: "Matthew Commentary", color: "#fb923c" },
 };
+
+// Add a new category and update all UI surfaces
+function addCategory(key, label, color) {
+  CATS[key] = { label, color };
+  // Legend
+  const legendDiv = document.getElementById('legend');
+  const item = document.createElement('div');
+  item.className = 'legend-item';
+  item.dataset.cat = key;
+  item.innerHTML = `<div class="legend-dot" style="background:${color}"></div>${label}`;
+  item.addEventListener('click', () => {
+    if (typeof activeCat !== 'undefined') {
+      if (activeCat === key) {
+        activeCat = null;
+        if (nodeSel) nodeSel.classed("dimmed", false);
+        if (linkSel) linkSel.classed("dimmed", false);
+        document.querySelectorAll(".legend-item").forEach(i => i.style.opacity = "1");
+      } else {
+        activeCat = key;
+        const catIds = new Set(notes.filter(n => n.category === key).map(n => n.id));
+        if (nodeSel) nodeSel.classed("dimmed", n => n.category !== key);
+        if (linkSel) linkSel.classed("dimmed", l => !catIds.has(l.source.id||l.source) && !catIds.has(l.target.id||l.target));
+        document.querySelectorAll(".legend-item").forEach(i => {
+          i.style.opacity = i.dataset.cat === key ? "1" : "0.3";
+        });
+      }
+    }
+  });
+  legendDiv.appendChild(item);
+  // Cat picker in new-note modal
+  const picker = document.getElementById('nn-cat-picker');
+  const pill = document.createElement('button');
+  pill.type = 'button';
+  pill.className = 'cat-pill';
+  pill.dataset.cat = key;
+  pill.style.setProperty('--cc', color);
+  pill.textContent = label;
+  pill.addEventListener('click', function() {
+    picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('nn-category').value = key;
+  });
+  // Insert before the "+ New Category" button
+  const addBtn = document.getElementById('nn-add-cat-btn');
+  picker.insertBefore(pill, addBtn);
+}
 
 // ─────────────────────────────────────────────────────────────
 // NOTES
@@ -1660,13 +1779,19 @@ const STORAGE_KEY = 'theology-graph-v2';
 
 function persistData() {
   try {
+    // Capture custom (non-default) categories
+    const customCats = {};
+    Object.entries(CATS).forEach(([k, v]) => {
+      if (!DEFAULT_CAT_KEYS.has(k)) customCats[k] = v;
+    });
     const payload = {
       notes: notes.map(n => ({ ...n })),
       links: links.map(l => ({
         source:   typeof l.source === 'object' ? l.source.id : l.source,
         target:   typeof l.target === 'object' ? l.target.id : l.target,
         concepts: l.concepts
-      }))
+      })),
+      customCats
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     showToast('Saved');
@@ -1685,6 +1810,12 @@ function loadStoredData() {
 }
 
 const _stored = loadStoredData();
+// Restore custom categories before notes are rendered
+if (_stored && _stored.customCats) {
+  Object.entries(_stored.customCats).forEach(([k, v]) => {
+    if (!CATS[k]) addCategory(k, v.label, v.color);
+  });
+}
 // notes / links are already declared as let above – populate now
 notes.length = 0; links.length = 0;
 (_stored ? _stored.notes : SEED_NOTES).forEach(n => notes.push(n));
@@ -1775,9 +1906,9 @@ function rebuildGraph() {
         const ng = enter.append("g").attr("class","node");
         ng.append("circle")
           .attr("r",            d => rOf(d.id))
-          .attr("fill",         d => CATS[d.category].color)
+          .attr("fill",         d => (CATS[d.category]||{color:"#94a3b8"}).color)
           .attr("fill-opacity", 0.8)
-          .attr("stroke",       d => CATS[d.category].color)
+          .attr("stroke",       d => (CATS[d.category]||{color:"#94a3b8"}).color)
           .attr("stroke-width", 2)
           .attr("stroke-opacity", 0.55);
         ng.append("text")
@@ -1791,7 +1922,8 @@ function rebuildGraph() {
         ng.on("mouseenter", (e,d) => {
             if (activeId || isMobile) return;
             tooltip.style.opacity="1";
-            tooltip.innerHTML=`<strong style="color:#f1f5f9">${d.title}</strong><br><span style="color:${CATS[d.category].color};font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">${CATS[d.category].label}</span>`;
+            const _tc = CATS[d.category]||{color:"#94a3b8",label:d.category};
+            tooltip.innerHTML=`<strong style="color:#f1f5f9">${d.title}</strong><br><span style="color:${_tc.color};font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">${_tc.label}</span>`;
           })
           .on("mousemove", e => { tooltip.style.left=(e.clientX+14)+"px"; tooltip.style.top=(e.clientY-12)+"px"; })
           .on("mouseleave", () => { tooltip.style.opacity="0"; })
@@ -1801,8 +1933,8 @@ function rebuildGraph() {
       update => {
         update.select("circle")
           .attr("r", d => rOf(d.id))
-          .attr("fill", d => CATS[d.category].color)
-          .attr("stroke", d => CATS[d.category].color);
+          .attr("fill", d => (CATS[d.category]||{color:"#94a3b8"}).color)
+          .attr("stroke", d => (CATS[d.category]||{color:"#94a3b8"}).color);
         update.select("text")
           .attr("x", d => rOf(d.id)+6)
           .text(d => d.title.length>22 ? d.title.slice(0,20)+"\u2026" : d.title);
@@ -1831,9 +1963,9 @@ const _dummy_nodeSel = nodesGroup
 
 nodeSel.append("circle")
   .attr("r",            d => rOf(d.id))
-  .attr("fill",         d => CATS[d.category].color)
+  .attr("fill",         d => (CATS[d.category]||{color:"#94a3b8"}).color)
   .attr("fill-opacity", 0.8)
-  .attr("stroke",       d => CATS[d.category].color)
+  .attr("stroke",       d => (CATS[d.category]||{color:"#94a3b8"}).color)
   .attr("stroke-width", 2)
   .attr("stroke-opacity", 0.55);
 
@@ -1877,8 +2009,9 @@ function activateNode(d) {
 
 function renderPanel(d, connIds) {
   const cat = document.getElementById("panel-category");
-  cat.textContent = CATS[d.category].label;
-  cat.style.color = CATS[d.category].color;
+  const _cat = CATS[d.category] || { label: d.category, color: "#94a3b8" };
+  cat.textContent = _cat.label;
+  cat.style.color = _cat.color;
   document.getElementById("panel-title").textContent = d.title;
   document.getElementById("panel-date").textContent = d.date;
 
@@ -2041,6 +2174,61 @@ document.querySelectorAll('#nn-cat-picker .cat-pill').forEach(btn => {
   });
 });
 document.getElementById('nn-cancel').onclick = () => closeModal('modal-new-note');
+
+// ── NEW CATEGORY MODAL ─────────────────────────────────────
+document.getElementById('nn-add-cat-btn').addEventListener('click', () => {
+  document.getElementById('nc-name').value = '';
+  document.getElementById('nc-error').textContent = '';
+  // Reset swatches to first
+  document.querySelectorAll('.color-swatch').forEach((s, i) => {
+    s.classList.toggle('selected', i === 0);
+  });
+  const firstColor = '#e879f9';
+  document.getElementById('nc-selected-color').value = firstColor;
+  document.getElementById('nc-custom-color').value = firstColor;
+  openModal('modal-new-cat');
+  setTimeout(() => document.getElementById('nc-name').focus(), 80);
+});
+
+// Swatch selection
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+  swatch.addEventListener('click', function() {
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    this.classList.add('selected');
+    const c = this.dataset.color;
+    document.getElementById('nc-selected-color').value = c;
+    document.getElementById('nc-custom-color').value = c;
+  });
+});
+
+// Custom color picker sync
+document.getElementById('nc-custom-color').addEventListener('input', function() {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  document.getElementById('nc-selected-color').value = this.value;
+});
+
+document.getElementById('nc-cancel').onclick = () => {
+  closeModal('modal-new-cat');
+  openModal('modal-new-note');
+};
+
+document.getElementById('nc-save').onclick = () => {
+  const name   = document.getElementById('nc-name').value.trim();
+  const color  = document.getElementById('nc-selected-color').value || '#e879f9';
+  const errEl  = document.getElementById('nc-error');
+  if (!name) { errEl.textContent = 'Category name is required.'; return; }
+  const key = slugify(name) || ('cat-' + Date.now());
+  if (CATS[key]) { errEl.textContent = 'A category with this name already exists.'; return; }
+  addCategory(key, name, color);
+  persistData();
+  closeModal('modal-new-cat');
+  openModal('modal-new-note');
+  // Auto-select the new category
+  const picker = document.getElementById('nn-cat-picker');
+  picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+  const newPill = picker.querySelector(`.cat-pill[data-cat="${key}"]`);
+  if (newPill) { newPill.classList.add('active'); document.getElementById('nn-category').value = key; }
+};
 
 document.getElementById('nn-save').onclick = () => {
   const title   = document.getElementById('nn-title').value.trim();
