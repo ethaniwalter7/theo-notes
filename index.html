@@ -515,8 +515,8 @@
 
     #zoom-controls { right: 12px; bottom: calc(72px + var(--safe-bottom)); }
 
-    /* Push graph down so nodes aren't hidden behind the mobile header */
-    #graph-container { padding-top: 80px; }
+    /* Push graph down so nodes aren't hidden behind the mobile header (title + actions + search) */
+    #graph-container { padding-top: 118px; }
   }
 
   /* Mobile search bar */
@@ -561,6 +561,30 @@
     -webkit-appearance: none;
   }
   #mobile-search-input::placeholder { color: #334155; }
+
+  /* ── MOBILE ACTION BAR ──────────────────────────────────── */
+  #mobile-actions-bar {
+    display: flex;
+    gap: 6px;
+  }
+  .mob-action-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    padding: 7px 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: none;
+  }
+  .mob-action-btn:active { background: rgba(255,255,255,0.1); color: var(--text-secondary); }
+  .mob-action-danger { color: rgba(248,113,113,0.6); border-color: rgba(248,113,113,0.15); background: rgba(248,113,113,0.05); }
+  .mob-action-danger:active { background: rgba(248,113,113,0.12); color: #f87171; }
 
   /* ── FAB / NEW NOTE BUTTON ──────────────────────────────── */
   #fab-new-note {
@@ -755,6 +779,11 @@
       <div id="mobile-title-bar">
         <span id="mobile-app-title">Theological Notes</span>
         <span id="mobile-note-count-badge"></span>
+      </div>
+      <div id="mobile-actions-bar">
+        <button class="mob-action-btn" id="mobile-save-btn">💾 Save</button>
+        <button class="mob-action-btn" id="mobile-export-btn">⬆ Export</button>
+        <button class="mob-action-btn mob-action-danger" id="mobile-reset-btn">↺ Reset</button>
       </div>
       <input type="search" id="mobile-search-input" placeholder="Search notes…" autocomplete="off" />
     </div>
@@ -2382,7 +2411,52 @@ function confirmDeleteNote(d) {
   rebuildGraph();
 }
 
-// FAB uses standard click events (works natively on both desktop and iOS)
+// ─────────────────────────────────────────────────────────────
+// EXPORT / RESET / SAVE
+// ─────────────────────────────────────────────────────────────
+function doExport() {
+  const customCats = {};
+  Object.entries(CATS).forEach(([k, v]) => {
+    if (!DEFAULT_CAT_KEYS.has(k)) customCats[k] = v;
+  });
+  const payload = {
+    notes: notes.map(n => ({ ...n })),
+    links: links.map(l => ({
+      source:   typeof l.source === 'object' ? l.source.id : l.source,
+      target:   typeof l.target === 'object' ? l.target.id : l.target,
+      concepts: l.concepts
+    })),
+    customCats
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'theology-notes.json'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exported!');
+}
+
+function doReset() {
+  if (!confirm('Reset to original notes? All your edits and custom notes will be erased.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+}
+
+function doSave() {
+  persistData();
+}
+
+// Wire desktop buttons
+document.getElementById('export-btn').addEventListener('click', doExport);
+document.getElementById('reset-btn').addEventListener('click', doReset);
+
+// Wire mobile buttons
+const mSave   = document.getElementById('mobile-save-btn');
+const mExport = document.getElementById('mobile-export-btn');
+const mReset  = document.getElementById('mobile-reset-btn');
+if (mSave)   mSave.addEventListener('click',   doSave);
+if (mExport) mExport.addEventListener('click', doExport);
+if (mReset)  mReset.addEventListener('click',  doReset);
 
 </script>
 </body>
