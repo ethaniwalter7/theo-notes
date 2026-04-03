@@ -1,4 +1,4 @@
-const CACHE = 'theology-notes-v8';
+const CACHE = 'theology-notes-v9';
 
 const PRECACHE = [
   './',
@@ -28,8 +28,17 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch: serve from cache, fall back to network and cache result
+// Fetch: never intercept GitHub API calls — let them go straight to network
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
+  // Pass GitHub API requests directly through — never cache them
+  if (url.hostname === 'api.github.com') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // For everything else: cache-first, fall back to network
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
