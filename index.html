@@ -2599,7 +2599,8 @@ document.getElementById('gh-token-save').onclick = async () => {
     const r = await fetch(`${url}/rest/v1/notes_data?select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` }
     });
-    if (!r.ok) { errEl.textContent = 'Could not connect — check your URL and anon key.'; statusEl.textContent = ''; return; }
+    if (r.status === 404) { errEl.textContent = 'Table not found — run supabase/schema.sql in your Supabase SQL Editor first.'; statusEl.textContent = ''; return; }
+    if (!r.ok) { errEl.textContent = 'Could not connect — check your Project URL and anon key.'; statusEl.textContent = ''; return; }
     setSbCreds(url, key);
     statusEl.textContent = 'Connected! Saving notes to database…';
     setSyncStatus('syncing');
