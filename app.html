@@ -762,9 +762,33 @@
     border-color: color-mix(in srgb, var(--cc) 70%, transparent);
     font-weight: 600;
   }
+  /* ── LOADING OVERLAY ── */
+  #db-loading {
+    position: fixed; inset: 0;
+    background: #0a0a10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px;
+    z-index: 9999;
+    transition: opacity 0.3s;
+  }
+  #db-loading.hidden { opacity: 0; pointer-events: none; }
+  .db-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid rgba(251,146,60,0.2);
+    border-top-color: #fb923c;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .db-loading-text { font-size: 13px; color: #475569; font-weight: 500; }
 </style>
 </head>
 <body>
+<div id="db-loading">
+  <div class="db-spinner"></div>
+  <div class="db-loading-text">Loading from database…</div>
+</div>
 <div id="app">
   <div id="graph-container">
     <svg id="graph"></svg>
@@ -1199,17 +1223,8 @@ function loadStoredData() {
   return null;
 }
 
-const _stored = loadStoredData();
-// Restore custom categories before notes are rendered
-if (_stored && _stored.customCats) {
-  Object.entries(_stored.customCats).forEach(([k, v]) => {
-    if (!CATS[k]) addCategory(k, v.label, v.color);
-  });
-}
-// notes / links are already declared as let above – populate now
+// Start empty — async startup below loads from DB (with localStorage as fallback)
 notes.length = 0; links.length = 0;
-(_stored ? _stored.notes : []).forEach(n => notes.push(n));
-(_stored ? _stored.links : []).forEach(l => links.push(l));
 
 // ── Toast ──────────────────────────────────────────────────
 function showToast(msg) {
@@ -1847,25 +1862,44 @@ document.getElementById('gh-token-remove').onclick = () => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// ASYNC STARTUP – load from database if connected
 // ─────────────────────────────────────────────────────────────
+// ASYNC STARTUP – DB is primary source of truth
+// ─────────────────────────────────────────────────────────────
+function hideLoadingOverlay() {
+  const el = document.getElementById('db-loading');
+  if (el) { el.classList.add('hidden'); setTimeout(() => el.remove(), 350); }
+}
+
 (async () => {
   if (!sbConnected()) {
-    // Not connected – show setup prompt on first ever load
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      setTimeout(() => openGhModal(), 1200);
+    // Not connected — fall back to localStorage, then prompt setup
+    const local = loadStoredData();
+    if (local && applyPayload(local)) {
+      rebuildGraph();
     }
+    hideLoadingOverlay();
+    setTimeout(() => openGhModal(), 600);
     return;
   }
+
   setSyncStatus('syncing');
   const data = await sbFetch();
+
   if (data && applyPayload(data)) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     rebuildGraph();
     setSyncStatus('synced');
   } else {
-    setSyncStatus(sbConnected() ? 'error' : 'local');
+    // DB fetch failed — fall back to localStorage cache
+    const local = loadStoredData();
+    if (local && applyPayload(local)) {
+      rebuildGraph();
+    }
+    setSyncStatus('error');
+    showToast('⚠ Could not reach database');
   }
+
+  hideLoadingOverlay();
 })();
 
 </script>
