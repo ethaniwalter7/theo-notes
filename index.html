@@ -1887,14 +1887,26 @@ async function ghFetch() {
 async function ghSave(payload) {
   const token = ghToken(); if (!token) return false;
   try {
-    const body = { message: `Update notes ${new Date().toISOString().slice(0,10)}`, content: b64Enc(JSON.stringify(payload, null, 2)) };
-    const sha = localStorage.getItem(GH_SHA_KEY);
-    if (sha) body.sha = sha;
-    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
+    const encoded = b64Enc(JSON.stringify(payload, null, 2));
+    const makeBody = sha => {
+      const b = { message: `Update notes ${new Date().toISOString().slice(0,10)}`, content: encoded };
+      if (sha) b.sha = sha;
+      return b;
+    };
+    const putReq = body => fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
       method: 'PUT',
       headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github.v3+json' },
       body: JSON.stringify(body)
     });
+
+    let r = await putReq(makeBody(localStorage.getItem(GH_SHA_KEY)));
+
+    // If conflict or missing SHA, fetch current SHA and retry once
+    if (r.status === 409 || r.status === 422) {
+      await ghFetch();
+      r = await putReq(makeBody(localStorage.getItem(GH_SHA_KEY)));
+    }
+
     if (!r.ok) { console.warn('GH save failed', await r.json()); return false; }
     const j = await r.json();
     localStorage.setItem(GH_SHA_KEY, j.content.sha);
@@ -2397,6 +2409,7 @@ document.getElementById('nn-save').onclick = () => {
   notes.push(newNote);
   connCount[id] = 0;
   rebuildGraph();
+  persistData();
   closeModal('modal-new-note');
   // Activate the new note
   setTimeout(() => {
@@ -2470,6 +2483,7 @@ document.getElementById('ac-save').onclick = () => {
   connCount[_addConnSource.id] = (connCount[_addConnSource.id] || 0) + 1;
   connCount[targetId]          = (connCount[targetId]          || 0) + 1;
   rebuildGraph();
+  persistData();
   closeModal('modal-add-conn');
 
   // Re-open the source note panel so user sees the new connection
@@ -2509,6 +2523,7 @@ document.getElementById('ec-delete').onclick = () => {
   if (idx > -1) {
     links.splice(idx, 1);
     rebuildGraph();
+    persistData();
   }
   closeModal('modal-edit-conn');
   const nd = notes.find(n => n.id === _editConnSource.id);
@@ -2529,6 +2544,7 @@ function confirmDeleteNote(d) {
   delete connCount[d.id];
   deactivate();
   rebuildGraph();
+  persistData();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2601,8 +2617,10 @@ document.getElementById('gh-token-save').onclick = async () => {
     const r = await fetch('https://api.github.com/user', { headers: { Authorization: `token ${raw}` } });
     if (!r.ok) { errEl.textContent = 'Invalid token — please check and try again.'; statusEl.textContent = ''; return; }
     setGhToken(raw);
-    statusEl.textContent = 'Connected! Saving current notes to GitHub…';
+    statusEl.textContent = 'Connected! Fetching current state from GitHub…';
     setSyncStatus('syncing');
+    await ghFetch(); // populate SHA so the first save doesn't conflict
+    statusEl.textContent = 'Saving current notes to GitHub…';
     const ok = await ghSave(buildPayload());
     closeModal('modal-gh-setup');
     setSyncStatus(ok ? 'synced' : 'error');
