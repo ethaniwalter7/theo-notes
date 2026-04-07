@@ -32,8 +32,8 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Pass GitHub API requests directly through — never cache them
-  if (url.hostname === 'api.github.com') {
+  // Pass API requests directly through — never cache them
+  if (url.hostname === 'api.github.com' || url.hostname.endsWith('.supabase.co')) {
     event.respondWith(fetch(event.request));
     return;
   }
