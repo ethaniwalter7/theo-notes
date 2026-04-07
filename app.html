@@ -1101,11 +1101,13 @@ let notes = [], links = [];
 // ─────────────────────────────────────────────────────────────
 // SUPABASE SYNC
 // ─────────────────────────────────────────────────────────────
-const SB_URL_KEY   = 'theo-notes-sb-url';
-const SB_ANON_KEY  = 'theo-notes-sb-key';
+const SB_URL_KEY     = 'theo-notes-sb-url';
+const SB_ANON_KEY    = 'theo-notes-sb-key';
+const DEFAULT_SB_URL = 'https://mzwnqybhwdsnqbeqslzg.supabase.co';
+const DEFAULT_SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16d25xeWJod2RzbnFiZXFzbHpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1ODM2NjIsImV4cCI6MjA5MTE1OTY2Mn0.kqkGOm3ItXpxrjmaYI-KyLfmSZOZ_0a42clKYJ5dk5A';
 
-function sbUrl()      { return localStorage.getItem(SB_URL_KEY)  || ''; }
-function sbKey()      { return localStorage.getItem(SB_ANON_KEY) || ''; }
+function sbUrl()      { return localStorage.getItem(SB_URL_KEY)  || DEFAULT_SB_URL; }
+function sbKey()      { return localStorage.getItem(SB_ANON_KEY) || DEFAULT_SB_KEY; }
 function sbConnected(){ return !!(sbUrl() && sbKey()); }
 function setSbCreds(url, key) {
   if (url && key) { localStorage.setItem(SB_URL_KEY, url); localStorage.setItem(SB_ANON_KEY, key); }
@@ -1816,8 +1818,8 @@ if (dGh) dGh.addEventListener('click', openGhModal);
 // ─────────────────────────────────────────────────────────────
 function openGhModal() {
   const connected = sbConnected();
-  document.getElementById('sb-url-input').value   = connected ? sbUrl() : '';
-  document.getElementById('gh-token-input').value = connected ? '••••••••••••••••••••' : '';
+  document.getElementById('sb-url-input').value   = sbUrl();
+  document.getElementById('gh-token-input').value = connected ? '••••••••••••••••••••' : DEFAULT_SB_KEY;
   document.getElementById('gh-token-error').textContent = '';
   document.getElementById('gh-token-status').textContent = connected ? '✓ Database sync is connected.' : '';
   document.getElementById('gh-token-remove').style.display = connected ? 'block' : 'none';
