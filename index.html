@@ -909,17 +909,21 @@
     </div>
   </div>
 
-  <!-- ── GITHUB SYNC MODAL ────────────────────────────────────── -->
+  <!-- ── SUPABASE SYNC MODAL ────────────────────────────────────── -->
   <div class="modal-overlay" id="modal-gh-setup">
     <div class="modal-box">
-      <div class="modal-title">☁ GitHub Sync</div>
+      <div class="modal-title">☁ Database Sync</div>
       <p id="gh-setup-desc" style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:4px;">
-        Enter a GitHub Personal Access Token to sync your notes across all devices.
-        Create one at <strong style="color:var(--text-primary)">github.com → Settings → Developer settings → Personal access tokens (classic)</strong> — check the <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:4px;">repo</code> scope.
+        Connect a free <strong style="color:var(--text-primary)">Supabase</strong> project to sync notes across all devices.
+        Create a project at <strong style="color:var(--text-primary)">supabase.com</strong>, run the SQL in <code style="background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:4px;">supabase/schema.sql</code>, then paste your Project URL and anon key from <strong style="color:var(--text-primary)">Project Settings → API</strong>.
       </p>
       <div class="modal-field">
-        <label class="modal-label" for="gh-token-input">Personal Access Token</label>
-        <input class="modal-input" id="gh-token-input" type="password" placeholder="ghp_…" autocomplete="off" />
+        <label class="modal-label" for="sb-url-input">Project URL</label>
+        <input class="modal-input" id="sb-url-input" type="text" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label" for="gh-token-input">Anon Key</label>
+        <input class="modal-input" id="gh-token-input" type="password" placeholder="eyJ…" autocomplete="off" />
       </div>
       <div class="modal-error" id="gh-token-error"></div>
       <div id="gh-token-status" style="font-size:11px;color:var(--text-muted);min-height:16px;margin-bottom:4px;"></div>
@@ -927,7 +931,7 @@
         <button class="modal-btn-primary" id="gh-token-save">Connect &amp; Sync</button>
         <button class="modal-btn-secondary" id="gh-token-skip">Skip</button>
       </div>
-      <button id="gh-token-remove" style="display:none;width:100%;margin-top:8px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);color:rgba(248,113,113,0.6);border-radius:8px;padding:9px;cursor:pointer;font-size:12px;font-family:inherit;">Disconnect GitHub Sync</button>
+      <button id="gh-token-remove" style="display:none;width:100%;margin-top:8px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);color:rgba(248,113,113,0.6);border-radius:8px;padding:9px;cursor:pointer;font-size:12px;font-family:inherit;">Disconnect Sync</button>
     </div>
   </div>
 
@@ -1833,26 +1837,21 @@ let notes = [], links = [];
 
 
 // ─────────────────────────────────────────────────────────────
-// GITHUB SYNC
+// SUPABASE SYNC
 // ─────────────────────────────────────────────────────────────
-const GH_REPO      = 'ethaniwalter7/theo-notes';
-const GH_TOKEN_KEY = 'theo-notes-gh-token';
-const GH_SHA_KEY   = 'theo-notes-gh-sha';
+const SB_URL_KEY   = 'theo-notes-sb-url';
+const SB_ANON_KEY  = 'theo-notes-sb-key';
 
-function ghToken()     { return localStorage.getItem(GH_TOKEN_KEY) || ''; }
-function setGhToken(t) { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); }
-
-// UTF-8 safe base64
-function b64Enc(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = ''; bytes.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
+function sbUrl()      { return localStorage.getItem(SB_URL_KEY)  || ''; }
+function sbKey()      { return localStorage.getItem(SB_ANON_KEY) || ''; }
+function sbConnected(){ return !!(sbUrl() && sbKey()); }
+function setSbCreds(url, key) {
+  if (url && key) { localStorage.setItem(SB_URL_KEY, url); localStorage.setItem(SB_ANON_KEY, key); }
+  else            { localStorage.removeItem(SB_URL_KEY);   localStorage.removeItem(SB_ANON_KEY); }
 }
-function b64Dec(b64) {
-  const bin = atob(b64.replace(/\s/g,''));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+
+function sbHeaders() {
+  return { apikey: sbKey(), Authorization: `Bearer ${sbKey()}`, 'Content-Type': 'application/json' };
 }
 
 function setSyncStatus(state) {
@@ -1860,9 +1859,9 @@ function setSyncStatus(state) {
   const ghBtn = document.getElementById('gh-sync-btn');
   const mGhBtn = document.getElementById('mobile-gh-btn');
   const map = {
-    synced:  { icon: '☁', color: '#34d399', tip: 'Synced to GitHub' },
+    synced:  { icon: '☁', color: '#34d399', tip: 'Synced to database' },
     syncing: { icon: '↻', color: '#fbbf24', tip: 'Syncing…' },
-    error:   { icon: '☁✗', color: '#f87171', tip: 'GitHub sync failed' },
+    error:   { icon: '☁✗', color: '#f87171', tip: 'Database sync failed' },
     local:   { icon: '', color: '', tip: '' },
   };
   const s = map[state] || map.local;
@@ -1871,47 +1870,29 @@ function setSyncStatus(state) {
   if (mGhBtn) mGhBtn.style.color = state === 'synced' ? '#34d399' : state === 'error' ? '#f87171' : '';
 }
 
-async function ghFetch() {
-  const token = ghToken(); if (!token) return null;
+async function sbFetch() {
+  if (!sbConnected()) return null;
   try {
-    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+    const r = await fetch(`${sbUrl()}/rest/v1/notes_data?select=payload&id=eq.1`, {
+      headers: sbHeaders()
     });
     if (!r.ok) return null;
-    const j = await r.json();
-    localStorage.setItem(GH_SHA_KEY, j.sha);
-    return JSON.parse(b64Dec(j.content));
-  } catch(e) { console.warn('GH fetch failed', e); return null; }
+    const rows = await r.json();
+    return rows.length ? rows[0].payload : null;
+  } catch(e) { console.warn('DB fetch failed', e); return null; }
 }
 
-async function ghSave(payload) {
-  const token = ghToken(); if (!token) return false;
+async function sbSave(payload) {
+  if (!sbConnected()) return false;
   try {
-    const encoded = b64Enc(JSON.stringify(payload, null, 2));
-    const makeBody = sha => {
-      const b = { message: `Update notes ${new Date().toISOString().slice(0,10)}`, content: encoded };
-      if (sha) b.sha = sha;
-      return b;
-    };
-    const putReq = body => fetch(`https://api.github.com/repos/${GH_REPO}/contents/data.json`, {
-      method: 'PUT',
-      headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github.v3+json' },
-      body: JSON.stringify(body)
+    const r = await fetch(`${sbUrl()}/rest/v1/notes_data`, {
+      method: 'POST',
+      headers: { ...sbHeaders(), Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ id: 1, payload, updated_at: new Date().toISOString() })
     });
-
-    let r = await putReq(makeBody(localStorage.getItem(GH_SHA_KEY)));
-
-    // If conflict or missing SHA, fetch current SHA and retry once
-    if (r.status === 409 || r.status === 422) {
-      await ghFetch();
-      r = await putReq(makeBody(localStorage.getItem(GH_SHA_KEY)));
-    }
-
-    if (!r.ok) { console.warn('GH save failed', await r.json()); return false; }
-    const j = await r.json();
-    localStorage.setItem(GH_SHA_KEY, j.content.sha);
+    if (!r.ok) { console.warn('DB save failed', await r.text()); return false; }
     return true;
-  } catch(e) { console.warn('GH save error', e); return false; }
+  } catch(e) { console.warn('DB save error', e); return false; }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1948,11 +1929,11 @@ function persistData() {
   try {
     const payload = buildPayload();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    if (ghToken()) {
+    if (sbConnected()) {
       setSyncStatus('syncing');
-      ghSave(payload).then(ok => {
+      sbSave(payload).then(ok => {
         setSyncStatus(ok ? 'synced' : 'error');
-        showToast(ok ? '☁ Saved to GitHub' : '💾 Saved locally (sync failed)');
+        showToast(ok ? '☁ Saved to database' : '💾 Saved locally (sync failed)');
       });
     } else {
       showToast('💾 Saved locally');
@@ -2592,71 +2573,70 @@ if (dGh) dGh.addEventListener('click', openGhModal);
 // GITHUB TOKEN MODAL
 // ─────────────────────────────────────────────────────────────
 function openGhModal() {
-  const hasToken = !!ghToken();
-  document.getElementById('gh-token-input').value = hasToken ? '••••••••••••••••••••' : '';
+  const connected = sbConnected();
+  document.getElementById('sb-url-input').value   = connected ? sbUrl() : '';
+  document.getElementById('gh-token-input').value = connected ? '••••••••••••••••••••' : '';
   document.getElementById('gh-token-error').textContent = '';
-  document.getElementById('gh-token-status').textContent = hasToken ? '✓ GitHub sync is connected.' : '';
-  document.getElementById('gh-token-remove').style.display = hasToken ? 'block' : 'none';
-  document.getElementById('gh-setup-desc').style.display = hasToken ? 'none' : 'block';
+  document.getElementById('gh-token-status').textContent = connected ? '✓ Database sync is connected.' : '';
+  document.getElementById('gh-token-remove').style.display = connected ? 'block' : 'none';
+  document.getElementById('gh-setup-desc').style.display = connected ? 'none' : 'block';
   openModal('modal-gh-setup');
-  if (!hasToken) setTimeout(() => document.getElementById('gh-token-input').focus(), 80);
+  if (!connected) setTimeout(() => document.getElementById('sb-url-input').focus(), 80);
 }
 
 document.getElementById('gh-token-skip').onclick = () => closeModal('modal-gh-setup');
 
 document.getElementById('gh-token-save').onclick = async () => {
-  const raw = document.getElementById('gh-token-input').value.trim();
-  const errEl = document.getElementById('gh-token-error');
+  const url = document.getElementById('sb-url-input').value.trim();
+  const key = document.getElementById('gh-token-input').value.trim();
+  const errEl    = document.getElementById('gh-token-error');
   const statusEl = document.getElementById('gh-token-status');
-  if (!raw || raw.startsWith('•')) { closeModal('modal-gh-setup'); return; }
-  if (!raw.startsWith('ghp_') && !raw.startsWith('github_pat_')) {
-    errEl.textContent = 'Token should start with ghp_ or github_pat_'; return;
-  }
-  statusEl.textContent = 'Verifying token…'; errEl.textContent = '';
+  if (key.startsWith('•')) { closeModal('modal-gh-setup'); return; }
+  if (!url || !key) { errEl.textContent = 'Both Project URL and Anon Key are required.'; return; }
+  if (!url.includes('supabase.co')) { errEl.textContent = 'Project URL should be https://xxxx.supabase.co'; return; }
+  statusEl.textContent = 'Verifying connection…'; errEl.textContent = '';
   try {
-    const r = await fetch('https://api.github.com/user', { headers: { Authorization: `token ${raw}` } });
-    if (!r.ok) { errEl.textContent = 'Invalid token — please check and try again.'; statusEl.textContent = ''; return; }
-    setGhToken(raw);
-    statusEl.textContent = 'Connected! Fetching current state from GitHub…';
+    const r = await fetch(`${url}/rest/v1/notes_data?select=id&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    if (!r.ok) { errEl.textContent = 'Could not connect — check your URL and anon key.'; statusEl.textContent = ''; return; }
+    setSbCreds(url, key);
+    statusEl.textContent = 'Connected! Saving notes to database…';
     setSyncStatus('syncing');
-    await ghFetch(); // populate SHA so the first save doesn't conflict
-    statusEl.textContent = 'Saving current notes to GitHub…';
-    const ok = await ghSave(buildPayload());
+    const ok = await sbSave(buildPayload());
     closeModal('modal-gh-setup');
     setSyncStatus(ok ? 'synced' : 'error');
-    showToast(ok ? '☁ GitHub sync enabled!' : 'Token saved but initial sync failed');
+    showToast(ok ? '☁ Database sync enabled!' : 'Credentials saved but initial sync failed');
   } catch(e) { errEl.textContent = 'Connection error — check your internet.'; statusEl.textContent = ''; }
 };
 
 document.getElementById('gh-token-remove').onclick = () => {
-  if (!confirm('Disconnect GitHub sync? Notes will only save locally from now on.')) return;
-  setGhToken('');
-  localStorage.removeItem(GH_SHA_KEY);
+  if (!confirm('Disconnect database sync? Notes will only save locally from now on.')) return;
+  setSbCreds('', '');
   closeModal('modal-gh-setup');
   setSyncStatus('local');
-  showToast('GitHub sync disconnected');
+  showToast('Database sync disconnected');
 };
 
 // ─────────────────────────────────────────────────────────────
-// ASYNC STARTUP – load from GitHub if token is set
+// ASYNC STARTUP – load from database if connected
 // ─────────────────────────────────────────────────────────────
 (async () => {
-  if (!ghToken()) {
-    // No token – show setup prompt after a short delay (only on first ever load)
+  if (!sbConnected()) {
+    // Not connected – show setup prompt on first ever load
     if (!localStorage.getItem(STORAGE_KEY)) {
       setTimeout(() => openGhModal(), 1200);
     }
     return;
   }
   setSyncStatus('syncing');
-  const data = await ghFetch();
+  const data = await sbFetch();
   if (data && applyPayload(data)) {
-    // Also update localStorage backup
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     rebuildGraph();
     setSyncStatus('synced');
   } else {
-    setSyncStatus(ghToken() ? 'error' : 'local');
+    setSyncStatus(sbConnected() ? 'error' : 'local');
   }
 })();
 
