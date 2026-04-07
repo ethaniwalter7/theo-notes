@@ -1,8 +1,9 @@
-const CACHE = 'theology-notes-v9';
+const CACHE = 'theology-notes-v10';
 
 const PRECACHE = [
   './',
   './index.html',
+  './app.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
