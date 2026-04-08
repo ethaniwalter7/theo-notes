@@ -40,6 +40,26 @@
     color: var(--text-muted);
     margin-top: 4px;
   }
+  .hub-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #refresh-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 10px;
+    padding: 8px 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+  #refresh-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
 
   /* ── GRID ── */
   .hub-grid {
@@ -196,8 +216,13 @@
 <body>
 
 <div class="hub-header">
-  <h1>Theo Notes</h1>
-  <p>Your note projects</p>
+  <div class="hub-header-row">
+    <div>
+      <h1>Theo Notes</h1>
+      <p>Your note projects</p>
+    </div>
+    <button id="refresh-btn" title="Refresh">↻ Refresh</button>
+  </div>
 </div>
 
 <div class="hub-grid" id="hub-grid">
@@ -346,6 +371,9 @@ document.getElementById('np-name').addEventListener('keydown', e => {
 });
 
 renderGrid();
+document.getElementById('refresh-btn').addEventListener('click', () => {
+  renderGrid();
+});
 </script>
 </body>
 </html>
