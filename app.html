@@ -422,6 +422,39 @@
   }
   #cancel-btn:active { background: rgba(255,255,255,0.08); }
 
+  /* ── EDIT CATEGORY PICKER ───────────────────────────────── */
+  #edit-cat-section {
+    padding: 12px 22px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #edit-cat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 8px;
+  }
+  #edit-cat-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  #edit-add-cat-btn {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    background: rgba(255,255,255,0.04);
+    border: 1px dashed rgba(255,255,255,0.2);
+    color: var(--text-muted);
+    transition: background 0.15s, color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #edit-add-cat-btn:hover { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+
   /* ── MOBILE OVERRIDES ───────────────────────────────────── */
   @media (max-width: 700px) {
     #header, #search-wrap { display: none; }
@@ -871,6 +904,11 @@
 
     <div id="panel-editor">
       <div id="edit-header">Editing: <strong id="edit-title-label"></strong></div>
+      <div id="edit-cat-section">
+        <div id="edit-cat-label">Category</div>
+        <div id="edit-cat-picker"></div>
+        <button type="button" id="edit-add-cat-btn">＋ New Category</button>
+      </div>
       <textarea id="edit-textarea" spellcheck="true"></textarea>
       <div id="edit-actions">
         <button id="save-btn">Save Changes</button>
@@ -1494,16 +1532,51 @@ function renderPanel(d, connIds) {
   document.getElementById("delete-note-btn").onclick = () => confirmDeleteNote(d);
 }
 
+let _editCatSelected = null;
+
+function buildEditCatPicker(currentCat) {
+  _editCatSelected = currentCat;
+  const picker = document.getElementById('edit-cat-picker');
+  picker.innerHTML = '';
+  Object.entries(CATS).forEach(([key, cat]) => {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'cat-pill' + (key === currentCat ? ' active' : '');
+    pill.dataset.cat = key;
+    pill.style.setProperty('--cc', cat.color);
+    pill.textContent = cat.label;
+    pill.addEventListener('click', function() {
+      picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      _editCatSelected = key;
+    });
+    picker.appendChild(pill);
+  });
+}
+
 function openEditor(d) {
   document.getElementById("panel-view").style.display = "none";
   const ed = document.getElementById("panel-editor");
   ed.style.display = "flex";
   document.getElementById("edit-title-label").textContent = d.title;
+  buildEditCatPicker(d.category);
   const ta = document.getElementById("edit-textarea");
   ta.value = d.content;
   ta.focus();
   document.getElementById("save-btn").onclick = () => {
     d.content = ta.value;
+    if (_editCatSelected && _editCatSelected !== d.category) {
+      d.category = _editCatSelected;
+      // Update panel header category chip
+      const catInfo = CATS[d.category];
+      if (catInfo) {
+        document.getElementById('panel-category').textContent = catInfo.label;
+        document.getElementById('panel-category').style.background = catInfo.color + '22';
+        document.getElementById('panel-category').style.color = catInfo.color;
+      }
+      // Re-render graph node color
+      rebuildGraph();
+    }
     showViewMode();
     document.getElementById("panel-content").innerHTML =
       d.content.split(/\n\n+/).filter(p => p.trim())
@@ -1513,6 +1586,20 @@ function openEditor(d) {
   };
   document.getElementById("cancel-btn").onclick = showViewMode;
 }
+
+// Track where nc-save should return after creating a category
+let _ncReturnTarget = 'new-note'; // 'new-note' or 'editor'
+
+document.getElementById('edit-add-cat-btn').addEventListener('click', () => {
+  _ncReturnTarget = 'editor';
+  document.getElementById('nc-name').value = '';
+  document.getElementById('nc-error').textContent = '';
+  document.querySelectorAll('.color-swatch').forEach((s, i) => s.classList.toggle('selected', i === 0));
+  document.getElementById('nc-selected-color').value = '#e879f9';
+  document.getElementById('nc-custom-color').value = '#e879f9';
+  openModal('modal-new-cat');
+  setTimeout(() => document.getElementById('nc-name').focus(), 80);
+});
 
 function showViewMode() {
   document.getElementById("panel-editor").style.display = "none";
@@ -1634,15 +1721,12 @@ document.getElementById('nn-cancel').onclick = () => closeModal('modal-new-note'
 
 // ── NEW CATEGORY MODAL ─────────────────────────────────────
 document.getElementById('nn-add-cat-btn').addEventListener('click', () => {
+  _ncReturnTarget = 'new-note';
   document.getElementById('nc-name').value = '';
   document.getElementById('nc-error').textContent = '';
-  // Reset swatches to first
-  document.querySelectorAll('.color-swatch').forEach((s, i) => {
-    s.classList.toggle('selected', i === 0);
-  });
-  const firstColor = '#e879f9';
-  document.getElementById('nc-selected-color').value = firstColor;
-  document.getElementById('nc-custom-color').value = firstColor;
+  document.querySelectorAll('.color-swatch').forEach((s, i) => s.classList.toggle('selected', i === 0));
+  document.getElementById('nc-selected-color').value = '#e879f9';
+  document.getElementById('nc-custom-color').value = '#e879f9';
   closeModal('modal-new-note');
   openModal('modal-new-cat');
   setTimeout(() => document.getElementById('nc-name').focus(), 80);
@@ -1666,8 +1750,12 @@ document.getElementById('nc-custom-color').addEventListener('input', function() 
 });
 
 document.getElementById('nc-cancel').onclick = () => {
-  closeModal('modal-new-cat');
-  openModal('modal-new-note');
+  document.getElementById('modal-new-cat').classList.remove('open');
+  if (_ncReturnTarget === 'editor') {
+    // editor stays visible in side panel — nothing to re-open
+  } else {
+    document.getElementById('modal-new-note').classList.add('open');
+  }
 };
 
 document.getElementById('nc-save').onclick = () => {
@@ -1682,12 +1770,17 @@ document.getElementById('nc-save').onclick = () => {
   }
   addCategory(key, name, color);
   document.getElementById('modal-new-cat').classList.remove('open');
-  document.getElementById('modal-new-note').classList.add('open');
-  // Auto-select the new category pill
-  const picker = document.getElementById('nn-cat-picker');
-  picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
-  const newPill = picker.querySelector(`.cat-pill[data-cat="${key}"]`);
-  if (newPill) { newPill.classList.add('active'); document.getElementById('nn-category').value = key; }
+  if (_ncReturnTarget === 'editor') {
+    // Rebuild edit cat picker and auto-select the new category
+    buildEditCatPicker(key);
+  } else {
+    document.getElementById('modal-new-note').classList.add('open');
+    // Auto-select the new category pill in new-note modal
+    const picker = document.getElementById('nn-cat-picker');
+    picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+    const newPill = picker.querySelector(`.cat-pill[data-cat="${key}"]`);
+    if (newPill) { newPill.classList.add('active'); document.getElementById('nn-category').value = key; }
+  }
   persistData();
 };
 
