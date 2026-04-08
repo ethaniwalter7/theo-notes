@@ -1095,9 +1095,7 @@ function addCategory(key, label, color) {
     this.classList.add('active');
     document.getElementById('nn-category').value = key;
   });
-  // Insert before the "+ New Category" button
-  const addBtn = document.getElementById('nn-add-cat-btn');
-  picker.insertBefore(pill, addBtn);
+  picker.appendChild(pill);
 }
 
 
