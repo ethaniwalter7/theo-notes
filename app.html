@@ -1034,10 +1034,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// CATEGORIES  –  mutable so users can add custom ones
+// CATEGORIES  –  project-specific defaults + user custom ones
 // ─────────────────────────────────────────────────────────────
-const DEFAULT_CAT_KEYS = new Set(["barth","dostoevsky","church","philosophy","personal","matthew"]);
-const CATS = {
+// The theological categories only appear in the default project.
+// All other projects start with a single "General" category.
+const _THEOLOGICAL_CATS = {
   barth:       { label: "Barth / Systematic", color: "#60a5fa" },
   dostoevsky:  { label: "Dostoevsky",         color: "#a78bfa" },
   church:      { label: "Church & Ethics",    color: "#34d399" },
@@ -1045,6 +1046,13 @@ const CATS = {
   personal:    { label: "Reflections",        color: "#f87171" },
   matthew:     { label: "Matthew Commentary", color: "#fb923c" },
 };
+const _BASE_CATS = {
+  general: { label: "General", color: "#94a3b8" },
+};
+const DEFAULT_CAT_KEYS = new Set(
+  PROJECT_ID === 'default' ? Object.keys(_THEOLOGICAL_CATS) : Object.keys(_BASE_CATS)
+);
+const CATS = PROJECT_ID === 'default' ? { ..._THEOLOGICAL_CATS } : { ..._BASE_CATS };
 
 // Add a new category and update all UI surfaces
 function addCategory(key, label, color) {
@@ -1606,9 +1614,10 @@ document.getElementById('fab-new-note').addEventListener('click', function() {
   document.getElementById('nn-error').textContent = '';
   // Reset category pills
   document.querySelectorAll('#nn-cat-picker .cat-pill').forEach(b => b.classList.remove('active'));
-  const firstPill = document.querySelector('#nn-cat-picker .cat-pill[data-cat="barth"]');
+  const defaultCat = Object.keys(CATS)[0];
+  const firstPill = document.querySelector(`#nn-cat-picker .cat-pill[data-cat="${defaultCat}"]`);
   if (firstPill) firstPill.classList.add('active');
-  document.getElementById('nn-category').value = 'barth';
+  document.getElementById('nn-category').value = defaultCat;
   openModal('modal-new-note');
   setTimeout(() => document.getElementById('nn-title').focus(), 80);
 });
@@ -2702,6 +2711,9 @@ function hideLoadingOverlay() {
   const data = await sbFetch();
 
   if (data) {
+    // Restore custom cats from local cache (not stored in DB columns)
+    const localCached = loadStoredData();
+    if (localCached?.customCats) data.customCats = localCached.customCats;
     applyPayload(data);
     // If DB returned empty notes for the default project, seed it
     if (notes.length === 0 && PROJECT_ID === 'default') {
