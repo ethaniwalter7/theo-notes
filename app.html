@@ -1201,7 +1201,7 @@ async function sbSave(payload) {
     if (connRows.length) {
       const cr = await fetch(`${sbUrl()}/rest/v1/connections`, {
         method: 'POST',
-        headers: { ...sbHeaders(), Prefer: 'return=minimal' },
+        headers: { ...sbHeaders(), Prefer: 'resolution=ignore-duplicates,return=minimal' },
         body: JSON.stringify(connRows)
       });
       if (!cr.ok) { console.warn('DB conn save failed', await cr.text()); return false; }
@@ -1406,7 +1406,6 @@ function rebuildGraph() {
   document.getElementById("note-count").textContent = `${notes.length} notes \xb7 ${links.length} connections`;
   const mBadge = document.getElementById("mobile-note-count-badge");
   if (mBadge) mBadge.textContent = `${notes.length} notes`;
-  persistData();
 }
 
 rebuildGraph();
@@ -1585,10 +1584,13 @@ document.getElementById("zoom-reset").onclick = () => svg.transition().duration(
 
 // ── Helpers ────────────────────────────────────────────────
 function slugify(title) {
-  return title.toLowerCase()
-    .replace(/[^a-z0-9 ]/g, '')
-    .trim().replace(/\s+/g, '-')
-    .slice(0, 60) + '-' + Date.now().toString(36);
+  // Notes get a timestamp suffix so duplicate titles get unique IDs
+  const base = title.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, '-').slice(0, 50);
+  return (base || 'note') + '-' + Date.now().toString(36);
+}
+function slugifyStable(str) {
+  // Categories use a stable slug (no timestamp) so duplicates are detectable
+  return str.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().replace(/\s+/g, '-').slice(0, 60);
 }
 
 function todayStr() {
@@ -1643,6 +1645,7 @@ document.getElementById('nn-add-cat-btn').addEventListener('click', () => {
   const firstColor = '#e879f9';
   document.getElementById('nc-selected-color').value = firstColor;
   document.getElementById('nc-custom-color').value = firstColor;
+  closeModal('modal-new-note');
   openModal('modal-new-cat');
   setTimeout(() => document.getElementById('nc-name').focus(), 80);
 });
@@ -1674,17 +1677,20 @@ document.getElementById('nc-save').onclick = () => {
   const color  = document.getElementById('nc-selected-color').value || '#e879f9';
   const errEl  = document.getElementById('nc-error');
   if (!name) { errEl.textContent = 'Category name is required.'; return; }
-  const key = slugify(name) || ('cat-' + Date.now());
-  if (CATS[key]) { errEl.textContent = 'A category with this name already exists.'; return; }
+  const key = slugifyStable(name) || ('cat-' + Date.now().toString(36));
+  const nameLower = name.toLowerCase();
+  if (CATS[key] || Object.values(CATS).some(c => c.label.toLowerCase() === nameLower)) {
+    errEl.textContent = 'A category with this name already exists.'; return;
+  }
   addCategory(key, name, color);
-  persistData();
-  closeModal('modal-new-cat');
-  openModal('modal-new-note');
-  // Auto-select the new category
+  document.getElementById('modal-new-cat').classList.remove('open');
+  document.getElementById('modal-new-note').classList.add('open');
+  // Auto-select the new category pill
   const picker = document.getElementById('nn-cat-picker');
   picker.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
   const newPill = picker.querySelector(`.cat-pill[data-cat="${key}"]`);
   if (newPill) { newPill.classList.add('active'); document.getElementById('nn-category').value = key; }
+  persistData();
 };
 
 document.getElementById('nn-save').onclick = () => {
